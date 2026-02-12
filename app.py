@@ -3,6 +3,8 @@ import psycopg2
 import hashlib
 import re
 import os
+import secrets  # ⚠️ ESTAVA FALTANDO ESTA LINHA!
+import logging
 from datetime import datetime, date
 from urllib.parse import urlparse
 
@@ -210,6 +212,7 @@ def cadastrar_usuario():
             session['user_nome'] = user_nome
             session['user_email'] = user_email
             session['logged_in'] = True
+            session.permanent = True
             
             return jsonify({
                 'success': True,
@@ -373,9 +376,14 @@ def dashboard():
 @app.route('/health')
 def health():
     """Endpoint para verificar saúde da aplicação"""
+    conn = get_db_connection()
+    db_status = 'connected' if conn else 'disconnected'
+    if conn:
+        conn.close()
+    
     return jsonify({
         'status': 'healthy',
-        'database': 'connected' if get_db_connection() else 'disconnected',
+        'database': db_status,
         'timestamp': datetime.now().isoformat()
     })
 
@@ -393,4 +401,5 @@ if __name__ == '__main__':
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SECURE'] = False
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5000)v
+
