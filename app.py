@@ -1,40 +1,51 @@
 from flask import Flask, request, jsonify, render_template, session, redirect, url_for
 import psycopg2
+import psycopg2.extras
 import hashlib
 import re
 import os
-import secrets  # ⚠️ ESTAVA FALTANDO ESTA LINHA!
+import secrets  # ✅ IMPORT ADICIONADO
 import logging
 from datetime import datetime, date
-from urllib.parse import urlparse
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
-# ========== CONFIGURAÇÃO DO BANCO DE DADOS NEON.TECH ==========
-# String de conexão do Neon.tech
+# ========== CONFIGURAÇÃO DE SEGURANÇA ==========
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    SECRET_KEY = secrets.token_hex(32)  # ✅ AGORA FUNCIONA!
+    print("⚠️ SECRET_KEY não encontrada. Usando valor gerado.")
+app.secret_key = SECRET_KEY
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = False  # Mude para True em produção com HTTPS
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 horas
+
+# ========== CONFIGURAÇÃO DO BANCO NEON.TECH ==========
 DATABASE_URL = os.environ.get('DATABASE_URL', 
     'postgresql://neondb_owner:npg_hJ6VyeWsKHf0@ep-restless-bush-ai3wlmz2-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require')
 
 def get_db_connection():
-    """Cria conexão com o banco de dados Neon.tech"""
+    """Cria conexão com o Neon.tech"""
     try:
-        # Usar SSL mode require para conexão segura
         conn = psycopg2.connect(DATABASE_URL, sslmode='require')
         return conn
     except Exception as e:
         print(f"❌ Erro ao conectar ao Neon.tech: {e}")
         return None
 
-def criar_tabela():
-    """Cria as tabelas necessárias no Neon.tech"""
+def criar_tabelas():
+    """Cria as tabelas necessárias"""
     conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            
-            # Tabela de usuários
-            create_table_query = """
+    if not conn:
+        print("❌ Não foi possível conectar ao banco")
+        return False
+    
+    try:
+        cursor = conn.cursor()
+        
+        # Tabela usuario
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS usuario (
                 id SERIAL PRIMARY KEY,
                 nome VARCHAR(100) NOT NULL,
@@ -46,11 +57,10 @@ def criar_tabela():
                 ultimo_login TIMESTAMP,
                 ativo BOOLEAN DEFAULT TRUE
             )
-            """
-            cursor.execute(create_table_query)
-            
-            # Tabela de recuperação de senha
-            create_recuperacao_table = """
+        """)
+        
+        # Tabela recuperacao_senha
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS recuperacao_senha (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER NOT NULL,
@@ -60,41 +70,33 @@ def criar_tabela():
                 expira_em TIMESTAMP NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES usuario(id) ON DELETE CASCADE
             )
-            """
-            cursor.execute(create_recuperacao_table)
-            
-            # Criar índices para melhor performance
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_usuario_email ON usuario(email)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_recuperacao_token ON recuperacao_senha(token)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_recuperacao_user_id ON recuperacao_senha(user_id)")
-            
-            conn.commit()
-            cursor.close()
+        """)
+        
+        # Índices
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_usuario_email ON usuario(email)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_recuperacao_token ON recuperacao_senha(token)")
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print("✅ Tabelas criadas/verificadas com sucesso!")
+        return True
+    except Exception as e:
+        print(f"❌ Erro ao criar tabelas: {e}")
+        if conn:
             conn.close()
-            print("✅ Tabelas criadas/verificadas com sucesso no Neon.tech!")
-            return True
-        except Exception as e:
-            print(f"❌ Erro ao criar tabelas: {e}")
-            if conn:
-                conn.close()
-            return False
-    else:
-        print("❌ Não foi possível conectar ao Neon.tech")
         return False
 
 # ========== FUNÇÕES AUXILIARES ==========
 
 def hash_password(password):
-    """Cria hash da senha usando SHA-256"""
     return hashlib.sha256(password.encode()).hexdigest()
 
 def validate_email(email):
-    """Valida formato do email"""
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
 
 def validate_date(date_string):
-    """Valida formato da data (YYYY-MM-DD)"""
     try:
         datetime.strptime(date_string, '%Y-%m-%d')
         return True
@@ -102,7 +104,6 @@ def validate_date(date_string):
         return False
 
 def calcular_idade(data_nascimento_str):
-    """Calcula a idade a partir da data de nascimento"""
     try:
         data_nascimento = datetime.strptime(data_nascimento_str, '%Y-%m-%d').date()
         hoje = date.today()
@@ -110,8 +111,7 @@ def calcular_idade(data_nascimento_str):
         if (hoje.month, hoje.day) < (data_nascimento.month, data_nascimento.day):
             idade -= 1
         return idade
-    except Exception as e:
-        print(f"Erro ao calcular idade: {e}")
+    except:
         return 0
 
 # ========== ROTAS ==========
@@ -156,12 +156,10 @@ def verificar_idade():
             'success': True,
             'idade': idade,
             'idade_valida': idade_valida,
-            'mensagem': f"Idade: {idade} anos - {'Válido' if idade_valida else 'Inválido'}",
-            'idade_minima': idade_minima
+            'mensagem': f"Idade: {idade} anos - {'Válido' if idade_valida else 'Inválido'}"
         })
-        
     except Exception as e:
-        return jsonify({'success': False, 'message': f'Erro: {str(e)}'}), 500
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 # ========== API DE CADASTRO ==========
 
@@ -219,14 +217,12 @@ def cadastrar_usuario():
                 'message': 'Cadastro realizado com sucesso!',
                 'user': {'id': user_id, 'nome': user_nome, 'email': user_email}
             })
-            
         except Exception as e:
             conn.rollback()
-            return jsonify({'success': False, 'message': f'Erro: {str(e)}'}), 500
+            return jsonify({'success': False, 'message': str(e)}), 500
         finally:
             cursor.close()
             conn.close()
-                
     except Exception as e:
         return jsonify({'success': False, 'message': 'Erro interno do servidor!'}), 500
 
@@ -277,13 +273,11 @@ def login():
                 'message': 'Login realizado com sucesso!',
                 'user': {'id': user_id, 'nome': nome, 'email': user_email}
             })
-            
         except Exception as e:
-            return jsonify({'success': False, 'message': f'Erro: {str(e)}'}), 500
+            return jsonify({'success': False, 'message': str(e)}), 500
         finally:
             cursor.close()
             conn.close()
-                
     except Exception as e:
         return jsonify({'success': False, 'message': 'Erro interno!'}), 500
 
@@ -319,7 +313,6 @@ def dashboard():
     <html>
     <head>
         <title>Dashboard</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
             body {{
                 font-family: Arial, sans-serif;
@@ -339,26 +332,22 @@ def dashboard():
                 width: 90%;
                 text-align: center;
             }}
-            h1 {{ color: #333; margin-bottom: 20px; }}
-            p {{ color: #666; margin: 10px 0; }}
+            h1 {{ color: #333; }}
             button {{
                 padding: 12px 30px;
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 color: white;
                 border: none;
                 border-radius: 5px;
-                font-size: 16px;
                 cursor: pointer;
                 margin-top: 20px;
             }}
-            button:hover {{ transform: translateY(-2px); }}
         </style>
     </head>
     <body>
         <div class="container">
             <h1>Bem-vindo, {session.get('user_nome')}!</h1>
             <p>Email: {session.get('user_email')}</p>
-            <p>ID: {session.get('user_id')}</p>
             <button onclick="logout()">Sair</button>
         </div>
         <script>
@@ -371,16 +360,14 @@ def dashboard():
     </html>
     """
 
-# ========== ROTA DE TESTE ==========
+# ========== ROTA DE SAÚDE ==========
 
 @app.route('/health')
 def health():
-    """Endpoint para verificar saúde da aplicação"""
     conn = get_db_connection()
     db_status = 'connected' if conn else 'disconnected'
     if conn:
         conn.close()
-    
     return jsonify({
         'status': 'healthy',
         'database': db_status,
@@ -389,17 +376,17 @@ def health():
 
 # ========== INICIALIZAÇÃO ==========
 
+# Criar tabelas ao iniciar (apenas se não estiver no Render)
 if __name__ != '__main__':
-    # Quando rodando no Render (produção)
+    # Configurar logging para o Gunicorn
     gunicorn_logger = logging.getLogger('gunicorn.error')
     app.logger.handlers = gunicorn_logger.handlers
     app.logger.setLevel(gunicorn_logger.level)
+    print("✅ Aplicação iniciada no Render")
 
 if __name__ == '__main__':
-    # Quando rodando localmente
-    criar_tabela()
-    app.config['SESSION_COOKIE_HTTPONLY'] = True
-    app.config['SESSION_COOKIE_SECURE'] = False
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    app.run(debug=True, port=5000)v
+    # Rodando localmente
+    criar_tabelas()
+    print("🚀 Servidor rodando em http://localhost:5000")
+    app.run(debug=True, port=5000)  # ✅ LINHA CORRIGIDA - SEM "v" NO FINAL!
 
