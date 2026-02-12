@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recuperar Senha</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .email-info {
+            background: #f0f8ff;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            border-left: 4px solid #667eea;
+            text-align: left;
+        }
+        .email-info p {
+            margin: 10px 0;
+            color: #555;
+        }
+        .email-info strong {
+            color: #333;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-top: 10px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .resultado {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            display: block;
+        }
+        .link {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .link a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        .link a:hover {
+            text-decoration: underline;
+        }
+        .warning {
+            color: #856404;
+            background: #fff3cd;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🔐 Recuperar Senha</h2>
+        
+        <div class="email-info">
+            <p><strong>Email cadastrado:</strong></p>
+            <p style="font-size: 18px; color: #667eea;">{{ email }}</p>
+            <p><strong>Usuário:</strong> {{ nome }}</p>
+        </div>
+        
+        <p style="color: #666; margin-bottom: 20px;">
+            Clique no botão abaixo para receber um link de recuperação no seu email.
+        </p>
+        
+        <button onclick="enviarRecuperacao()" id="btn-enviar">
+            📧 Enviar recuperação para meu email
+        </button>
+        
+        <div id="resultado" class="resultado"></div>
+        
+        <div class="warning">
+            ⚠️ O link de recuperação será enviado para o email <strong>{{ email }}</strong>
+        </div>
+        
+        <div class="link">
+            <p><a href="/dashboard">← Voltar para Dashboard</a></p>
+            <p><a href="/login">← Voltar para Login</a></p>
+        </div>
+    </div>
+
+    <script>
+        async function enviarRecuperacao() {
+            const resultado = document.getElementById('resultado');
+            const btnEnviar = document.getElementById('btn-enviar');
+            
+            // DESABILITAR BOTÃO
+            btnEnviar.disabled = true;
+            btnEnviar.innerHTML = '⏳ Enviando...';
+            
+            resultado.className = 'resultado info';
+            resultado.innerHTML = '⏳ Verificando cadastro e enviando email...';
+            resultado.style.display = 'block';
+            
+            try {
+                const response = await fetch('/api/enviar-email-recuperacao', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultado.className = 'resultado success';
+                    resultado.innerHTML = '✅ ' + data.message;
+                } else {
+                    resultado.className = 'resultado error';
+                    resultado.innerHTML = '❌ ' + data.message;
+                }
+            } catch (error) {
+                resultado.className = 'resultado error';
+                resultado.innerHTML = '❌ Erro de conexão com o servidor!';
+            } finally {
+                // REABILITAR BOTÃO
+                btnEnviar.disabled = false;
+                btnEnviar.innerHTML = '📧 Enviar recuperação para meu email';
+            }
+        }
+    </script>
+</body>
+</html>

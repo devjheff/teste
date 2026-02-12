@@ -1,0 +1,105 @@
+
+<!--
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Login</title>
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+
+  <a href="index.html" class="logo">
+<img src="../imgs/logobranca.png" alt="Logo">
+</a>
+
+
+<div class="container">
+  <h2>Login</h2>
+
+  <form>
+    <div class="input-group">
+      <label>Email</label>
+      <input type="email" placeholder="Digite seu email" required>
+    </div>
+
+    <div class="input-group">
+      <label>Senha</label>
+      <input type="password" placeholder="Digite sua senha" required>
+    </div>
+
+    <button type="submit">Entrar</button>
+    <p class="switchh">
+      <a href="recuperar_senha.html">Esqueci minha senha</a>
+    
+    <p class="switch">
+      Não tem conta? <a href="cadastro.html">Cadastrar</a>
+    </p>
+
+  </form>
+</div>
+
+</body>
+</html>
+-->
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; }
+        .form-group { margin-bottom: 15px; }
+        input { width: 100%; padding: 8px; margin-top: 5px; }
+        button { background: #28a745; color: white; padding: 10px; border: none; cursor: pointer; width: 100%; }
+        .error { color: red; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h2>Login</h2>
+    
+    <form id="loginForm">
+        <div class="form-group">
+            <label>Email:</label>
+            <input type="email" name="email" required>
+        </div>
+        
+        <div class="form-group">
+            <label>Senha:</label>
+            <input type="password" name="senha" required>
+        </div>
+        
+        <button type="submit">Entrar</button>
+    </form>
+    
+    <div id="message" class="error" class="forgot-password"></div>
+    
+    <p>Não tem conta? <a href="/cadastro">Cadastre-se</a> </p> 
+   
+
+    <a href="/templates/recuperar_senha.html">Esqueci minha senha</a>
+    
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const response = await fetch('/api/login', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await response.json();
+            const messageDiv = document.getElementById('message');
+            
+            if (data.success) {
+                window.location.href = '/dashboard';
+            } else {
+                messageDiv.textContent = data.message;
+            }
+        });
+    </script>
+</body>
+</html>
