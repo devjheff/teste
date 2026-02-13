@@ -4,7 +4,7 @@ import psycopg2.extras
 import hashlib
 import re
 import os
-import secrets  # ✅ IMPORT ADICIONADO
+import secrets
 import logging
 from datetime import datetime, date
 
@@ -13,22 +13,37 @@ app = Flask(__name__)
 # ========== CONFIGURAÇÃO DE SEGURANÇA ==========
 SECRET_KEY = os.environ.get('SECRET_KEY')
 if not SECRET_KEY:
-    SECRET_KEY = secrets.token_hex(32)  # ✅ AGORA FUNCIONA!
+    SECRET_KEY = secrets.token_hex(32)
     print("⚠️ SECRET_KEY não encontrada. Usando valor gerado.")
 app.secret_key = SECRET_KEY
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SECURE'] = False  # Mude para True em produção com HTTPS
+app.config['SESSION_COOKIE_SECURE'] = True  # Alterado para True em produção
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 horas
+app.config['SESSION_COOKIE_DOMAIN'] = None  # Permitir em qualquer domínio
 
 # ========== CONFIGURAÇÃO DO BANCO NEON.TECH ==========
-DATABASE_URL = os.environ.get('DATABASE_URL', 
-    'postgresql://neondb_owner:npg_hJ6VyeWsKHf0@ep-restless-bush-ai3wlmz2-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require')
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if not DATABASE_URL:
+    # Fallback apenas para desenvolvimento local
+    DATABASE_URL = 'postgresql://neondb_owner:npg_hJ6VyeWsKHf0@ep-restless-bush-ai3wlmz2-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require'
+    print("⚠️ DATABASE_URL não encontrada. Usando string de conexão local.")
 
 def get_db_connection():
     """Cria conexão com o Neon.tech"""
     try:
-        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+        # Garantir que sslmode está configurado corretamente
+        if 'sslmode' not in DATABASE_URL:
+            conn = psycopg2.connect(DATABASE_URL + '?sslmode=require')
+        else:
+            conn = psycopg2.connect(DATABASE_URL)
+        
+        # Testar a conexão
+        cursor = conn.cursor()
+        cursor.execute('SELECT 1')
+        cursor.close()
+        
+        print("✅ Conexão com banco de dados estabelecida")
         return conn
     except Exception as e:
         print(f"❌ Erro ao conectar ao Neon.tech: {e}")
@@ -352,8 +367,20 @@ def dashboard():
         </div>
         <script>
             async function logout() {{
-                await fetch('/api/logout', {{ method: 'POST' }});
-                window.location.href = '/login';
+                try {{
+                    const response = await fetch('/api/logout', {{ 
+                        method: 'POST',
+                        headers: {{
+                            'Content-Type': 'application/json'
+                        }}
+                    }});
+                    if (response.ok) {{
+                        window.location.href = '/login';
+                    }}
+                }} catch (error) {{
+                    console.error('Erro ao fazer logout:', error);
+                    window.location.href = '/login';
+                }}
             }}
         </script>
     </body>
@@ -374,19 +401,37 @@ def health():
         'timestamp': datetime.now().isoformat()
     })
 
+# ========== ROTA PARA VERIFICAR CONFIGURAÇÃO ==========
+
+@app.route('/config-check')
+def config_check():
+    """Rota auxiliar para verificar configurações (apenas para debug)"""
+    return jsonify({
+        'database_configured': DATABASE_URL is not None,
+        'secret_key_configured': app.secret_key is not None,
+        'environment': 'production' if os.environ.get('RENDER') else 'development'
+    })
+
 # ========== INICIALIZAÇÃO ==========
 
-# Criar tabelas ao iniciar (apenas se não estiver no Render)
-if __name__ != '__main__':
-    # Configurar logging para o Gunicorn
+# Criar tabelas ao iniciar a aplicação (tanto local quanto no Render)
+with app.app_context():
+    tabelas_criadas = criar_tabelas()
+    if tabelas_criadas:
+        print("✅ Banco de dados inicializado com sucesso!")
+    else:
+        print("⚠️ Problema ao inicializar banco de dados. Verifique a conexão.")
+
+# Configurar logging para produção
+if os.environ.get('RENDER'):
     gunicorn_logger = logging.getLogger('gunicorn.error')
     app.logger.handlers = gunicorn_logger.handlers
     app.logger.setLevel(gunicorn_logger.level)
-    print("✅ Aplicação iniciada no Render")
+    print("🚀 Aplicação iniciada no Render com configurações de produção")
+else:
+    print("🚀 Aplicação iniciada em modo desenvolvimento")
 
 if __name__ == '__main__':
     # Rodando localmente
-    criar_tabelas()
     print("🚀 Servidor rodando em http://localhost:5000")
-    app.run(debug=True, port=5000)  # ✅ LINHA CORRIGIDA - SEM "v" NO FINAL!
-
+    app.run(debug=True, host='0.0.0.0', port=5000)
